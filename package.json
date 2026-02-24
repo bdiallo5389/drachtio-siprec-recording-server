@@ -32,17 +32,17 @@
     "@eslint/js": "^9.11.1",
     "blue-tape": "^1.0.0",
     "clear-require": "^2.0.0",
-    "eslint": "^9.11.1",
+    "eslint": "^10.0.2",
     "fs-extra": "^11.2.0",
     "globals": "^15.9.0",
-    "tap-spec": "^5.0.0",
-    "tape": "^4.17.0"
+    "tap-spec": "^2.2.2",
+    "tape": "^2.9.1"
   },
   "dependencies": {
     "config": "^3.3.12",
     "debug": "^4.3.7",
     "drachtio-srf": "^5.0.0",
-    "eslint-plugin-promise": "^7.1.0",
+    "eslint-plugin-promise": "^4.3.1",
     "lodash": "^4.17.21",
     "pino": "^9.4.0",
     "redis": "^4.7.0",
