@@ -6,6 +6,10 @@ const srf = new Srf() ;
 const logger = srf.locals.logger = pino();
 let callHandler;
 
+srf.options((req, res) => {
+  res.send(200);
+});
+
 if (config.has('drachtio.host')) {
   logger.info(config.get('drachtio'), 'attempting inbound connection');
   srf.connect(config.get('drachtio'));
