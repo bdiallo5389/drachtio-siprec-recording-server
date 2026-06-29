@@ -8,6 +8,7 @@ const SipOptionsMonitor = require('./lib/sip-options-monitor');
 const debug = require('debug')('drachtio:siprec-recording-server');
 
 let callHandler;
+let sipOptionsMonitor = null;
 
 srf.options((req, res) => {
   //console.log("Requête:", JSON.stringify(req, null, 2));
@@ -40,13 +41,14 @@ if (config.has('drachtio.host')) {
         } else {
           logger.info("SIP OPTIONS monitoring enabled");
 
-          const monitor = new SipOptionsMonitor(
+          if (sipOptionsMonitor) sipOptionsMonitor.stop();
+          sipOptionsMonitor = new SipOptionsMonitor(
             srf,
             sipOptionsConfig,
             logger
           );
 
-          monitor.start();
+          sipOptionsMonitor.start();
         }
       }
     })
