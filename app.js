@@ -4,6 +4,19 @@ const pino = require('pino');
 const Srf = require('drachtio-srf');
 const srf = new Srf() ;
 const logger = srf.locals.logger = pino();
+
+// Returns the matching ACL entry { client, srcs } or null. Supports exact IP and CIDR x.x.x.x/y.
+function findAclMatch(sourceIp, aclEntries) {
+  const toUint32 = (ip) => ip.split('.').reduce((acc, o) => ((acc << 8) | parseInt(o, 10)) >>> 0, 0);
+  const matchesSrc = (src) => {
+    if (!src.includes('/')) return src === sourceIp;
+    const [network, bits] = src.split('/');
+    const mask = (0xFFFFFFFF << (32 - parseInt(bits, 10))) >>> 0;
+    return (toUint32(sourceIp) & mask) === (toUint32(network) & mask);
+  };
+  return aclEntries.find((entry) => entry.srcs.some(matchesSrc)) || null;
+}
+
 const SipOptionsMonitor = require('./lib/sip-options-monitor');
 const debug = require('debug')('drachtio:siprec-recording-server');
 
@@ -80,6 +93,49 @@ else if (config.has('freeswitch')) {
 }
 else {
   assert('recorder type not specified in configuration: must be either rtpengine or freeswitch');
+}
+
+// Optional SIP source IP ACL — activate per client via "sipAcl": { "enabled": true } in local.json.
+// ACL entries are defined in config/acl.json as [{ "client": "...", "srcs": ["IP or CIDR", ...] }].
+// The file is watched and reloaded automatically on change — no restart needed.
+if (config.has('sipAcl.enabled') && config.get('sipAcl.enabled')) {
+  const fs = require('fs');
+  const path = require('path');
+  const chokidar = require('chokidar');
+  const aclPath = path.resolve(__dirname, 'config/acl.json');
+
+  const aclState = { entries: [] };
+
+  const loadAcl = () => {
+    try {
+      aclState.entries = JSON.parse(fs.readFileSync(aclPath, 'utf8'));
+      logger.info({ count: aclState.entries.length }, 'SIP source IP ACL loaded');
+    } catch (e) {
+      logger.warn({ err: e.message }, 'Failed to read config/acl.json — ACL entries cleared');
+      aclState.entries = [];
+    }
+  };
+
+  loadAcl();
+
+  chokidar.watch(aclPath, {
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 100 }
+  }).on('change', () => {
+    logger.info('config/acl.json changed — reloading ACL');
+    loadAcl();
+  });
+
+  srf.use('invite', (req, res, next) => {
+    const srcIp = req.source_address;
+    const match = findAclMatch(srcIp, aclState.entries);
+    if (!match) {
+      logger.warn({ srcIp }, `INVITE rejected: source IP ${srcIp} not in ACL`);
+      return res.send(403);
+    }
+    logger.debug({ srcIp, client: match.client }, 'INVITE accepted by ACL');
+    next();
+  });
 }
 
 srf.invite(callHandler);
