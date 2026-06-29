@@ -84,4 +84,28 @@ else {
 
 srf.invite(callHandler);
 
+// ── Global error safety net ──────────────────────────────────────────────────
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled promise rejection');
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception — shutting down');
+  process.exit(1);
+});
+
+// ── Graceful shutdown on SIGTERM (Docker/K8s stop) ──────────────────────────
+function gracefulShutdown(signal) {
+  logger.info(`Received ${signal}, graceful shutdown starting (30s max)`);
+  srf.disconnect();
+  const timer = setTimeout(() => {
+    logger.warn('Graceful shutdown timeout reached, forcing exit');
+    process.exit(0);
+  }, 30000);
+  timer.unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+
 module.exports = srf;
