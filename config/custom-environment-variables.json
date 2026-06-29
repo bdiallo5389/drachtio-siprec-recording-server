@@ -1,0 +1,17 @@
+{
+  "drachtio": {
+    "host":   "DRACHTIO_HOST",
+    "port":   "DRACHTIO_PORT",
+    "secret": "DRACHTIO_SECRET"
+  },
+  "redis": {
+    "host": "REDIS_HOST",
+    "port": "REDIS_PORT"
+  },
+  "aa": {
+    "apiCallIP":      "AA_API_IP",
+    "port":           "AA_API_PORT",
+    "route":          "AA_API_ROUTE",
+    "apiCallTimeout": "AA_API_TIMEOUT_MS"
+  }
+}
