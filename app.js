@@ -3,7 +3,11 @@ const config = require('config');
 const pino = require('pino');
 const Srf = require('drachtio-srf');
 const srf = new Srf() ;
-const logger = srf.locals.logger = pino();
+const logger = srf.locals.logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  timestamp: pino.stdTimeFunctions.isoTime,
+  serializers: { err: pino.stdSerializers.err },
+});
 const SipOptionsMonitor = require('./lib/sip-options-monitor');
 const debug = require('debug')('drachtio:siprec-recording-server');
 
