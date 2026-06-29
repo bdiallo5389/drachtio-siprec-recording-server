@@ -79,7 +79,7 @@ else if (config.has('freeswitch')) {
   callHandler = require('./lib/freeswitch-call-handler')(logger);
 }
 else {
-  assert('recorder type not specified in configuration: must be either rtpengine or freeswitch');
+  throw new Error('recorder type not specified in configuration: must be either rtpengine or freeswitch');
 }
 
 srf.invite(callHandler);
