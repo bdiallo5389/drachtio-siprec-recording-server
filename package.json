@@ -24,6 +24,9 @@
   ],
   "author": "Dave Horton",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "bugs": {
     "url": "https://github.com/drachtio/drachtio-siprec-recording-server/issues"
   },
