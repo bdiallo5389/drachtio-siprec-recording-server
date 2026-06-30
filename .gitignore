@@ -64,3 +64,4 @@ test/tmp/recordings/**
 test/tmp/rtpengine/pcaps/**
 test/tmp/rtpengine/metadata/**
 test/tmp/rtpengine/tmp/**
+config/acl.json
