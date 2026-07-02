@@ -24,7 +24,6 @@ let callHandler;
 let sipOptionsMonitor = null;
 
 srf.options((req, res) => {
-  //console.log("Requête:", JSON.stringify(req, null, 2));
   const sourceIp = req.source_address;
   const via = req.msg?.headers?.via;
   const from = req.msg?.headers?.from;
