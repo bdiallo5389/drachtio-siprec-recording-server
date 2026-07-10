@@ -4,8 +4,16 @@ const pino = require('pino');
 const Srf = require('drachtio-srf');
 const srf = new Srf() ;
 const logger = srf.locals.logger = pino();
+const metrics = require('./lib/metrics');
+const { startMetricsServer } = metrics;
 const SipOptionsMonitor = require('./lib/sip-options-monitor');
+const PeerManager = require('./lib/peer-manager');
+const peerRegistry = require('./lib/peer-registry');
 const debug = require('debug')('drachtio:siprec-recording-server');
+
+const peerManager = new PeerManager('./peers/peers.json', logger);
+peerRegistry.update(peerManager.getPeers());
+peerManager.on('update', (peers) => peerRegistry.update(peers));
 
 let callHandler;
 
@@ -43,7 +51,9 @@ if (config.has('drachtio.host')) {
           const monitor = new SipOptionsMonitor(
             srf,
             sipOptionsConfig,
-            logger
+            logger,
+            peerManager,
+            metrics
           );
 
           monitor.start();
@@ -76,12 +86,15 @@ if (config.has('rtpengine')) {
 }
 else if (config.has('freeswitch')) {
   logger.info(config.get('freeswitch'), 'using freeswitch as the recorder');
-  callHandler = require('./lib/freeswitch-call-handler')(logger);
+  callHandler = require('./lib/freeswitch-call-handler')(logger, metrics);
 }
 else {
   assert('recorder type not specified in configuration: must be either rtpengine or freeswitch');
 }
 
 srf.invite(callHandler);
+
+const metricsPort = config.has('metrics.port') ? config.get('metrics.port') : 9090;
+startMetricsServer(metricsPort, logger);
 
 module.exports = srf;
