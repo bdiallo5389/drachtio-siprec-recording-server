@@ -8,6 +8,8 @@ const logger = srf.locals.logger = pino({
   timestamp: pino.stdTimeFunctions.isoTime,
   serializers: { err: pino.stdSerializers.err },
 });
+const metrics = require('./lib/metrics');
+const { startMetricsServer } = metrics;
 
 // Returns the matching ACL entry { client, srcs } or null. Supports exact IP and CIDR x.x.x.x/y.
 function findAclMatch(sourceIp, aclEntries) {
@@ -21,7 +23,13 @@ function findAclMatch(sourceIp, aclEntries) {
   return aclEntries.find((entry) => entry.srcs.some(matchesSrc)) || null;
 }
 const SipOptionsMonitor = require('./lib/sip-options-monitor');
+const PeerManager = require('./lib/peer-manager');
+const peerRegistry = require('./lib/peer-registry');
 const debug = require('debug')('drachtio:siprec-recording-server');
+
+const peerManager = new PeerManager('./peers/peers.json', logger);
+peerRegistry.update(peerManager.getPeers());
+peerManager.on('update', (peers) => peerRegistry.update(peers));
 
 let callHandler;
 let sipOptionsMonitor = null;
@@ -60,7 +68,9 @@ if (config.has('drachtio.host')) {
           sipOptionsMonitor = new SipOptionsMonitor(
             srf,
             sipOptionsConfig,
-            logger
+            logger,
+            peerManager,
+            metrics
           );
 
           sipOptionsMonitor.start();
@@ -93,7 +103,7 @@ if (config.has('rtpengine')) {
 }
 else if (config.has('freeswitch')) {
   logger.info(config.get('freeswitch'), 'using freeswitch as the recorder');
-  callHandler = require('./lib/freeswitch-call-handler')(logger);
+  callHandler = require('./lib/freeswitch-call-handler')(logger, metrics);
 }
 else {
   throw new Error('recorder type not specified in configuration: must be either rtpengine or freeswitch');
@@ -143,5 +153,8 @@ if (config.has('sipAcl.enabled') && config.get('sipAcl.enabled')) {
 }
 
 srf.invite(callHandler);
+
+const metricsPort = config.has('metrics.port') ? config.get('metrics.port') : 9090;
+startMetricsServer(metricsPort, logger);
 
 module.exports = srf;
