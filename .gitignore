@@ -6,6 +6,8 @@ yarn-debug.log*
 yarn-error.log*
 
 config/local.json
+config/acl.json
+peers/peers.json
 
 # Runtime data
 pids
