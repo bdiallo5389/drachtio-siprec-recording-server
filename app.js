@@ -1,5 +1,5 @@
-const assert = require('assert');
 const config = require('config');
+const path = require('path');
 const pino = require('pino');
 const Srf = require('drachtio-srf');
 const srf = new Srf() ;
@@ -27,25 +27,23 @@ const PeerManager = require('./lib/peer-manager');
 const peerRegistry = require('./lib/peer-registry');
 const debug = require('debug')('drachtio:siprec-recording-server');
 
-const peerManager = new PeerManager('./peers/peers.json', logger);
+const peerManager = new PeerManager(path.join(__dirname, 'peers/peers.json'), logger);
 peerRegistry.update(peerManager.getPeers());
 peerManager.on('update', (peers) => peerRegistry.update(peers));
 
 let callHandler;
 let sipOptionsMonitor = null;
+let destroyAllDialogs = null;
+let setShuttingDown   = null;
 
 srf.options((req, res) => {
-  const sourceIp = req.source_address;
-  const via = req.msg?.headers?.via;
-  const from = req.msg?.headers?.from;
-  debug(
-    `[receive] source_address=${req.source_address} via=${req.msg?.headers?.via} from=${req.msg?.headers?.from}`
-  );
+  debug(`[receive] source_address=${req.source_address} via=${req.msg?.headers?.via} from=${req.msg?.headers?.from}`);
   res.send(200);
 });
 
 if (config.has('drachtio.host')) {
-  logger.info(config.get('drachtio'), 'attempting inbound connection');
+  const { host: drachtioHost, port: drachtioPort } = config.get('drachtio');
+  logger.info({ host: drachtioHost, port: drachtioPort }, 'attempting inbound connection');
   srf.connect(config.get('drachtio'));
   srf
     .on('connect', (err, hp) => {
@@ -80,7 +78,8 @@ if (config.has('drachtio.host')) {
     .on('error', (err) => { logger.error(err, `Error connecting to drachtio server: ${err}`); });
 }
 else {
-  logger.info(config.get('drachtio'), 'listening for outbound connections');
+  const { port: drachtioPort } = config.get('drachtio');
+  logger.info({ port: drachtioPort }, 'listening for outbound connections');
   srf.listen(config.get('drachtio'));
 }
 
@@ -103,7 +102,10 @@ if (config.has('rtpengine')) {
 }
 else if (config.has('freeswitch')) {
   logger.info(config.get('freeswitch'), 'using freeswitch as the recorder');
-  callHandler = require('./lib/freeswitch-call-handler')(logger, metrics);
+  const freeswitchModule = require('./lib/freeswitch-call-handler');
+  callHandler = freeswitchModule(logger, metrics);
+  destroyAllDialogs = freeswitchModule.destroyAllDialogs;
+  setShuttingDown   = freeswitchModule.setShuttingDown;
 }
 else {
   throw new Error('recorder type not specified in configuration: must be either rtpengine or freeswitch');
@@ -114,7 +116,6 @@ else {
 // The file is watched and reloaded automatically on change — no restart needed.
 if (config.has('sipAcl.enabled') && config.get('sipAcl.enabled')) {
   const fs = require('fs');
-  const path = require('path');
   const chokidar = require('chokidar');
   const aclPath = path.resolve(__dirname, 'config/acl.json');
 
@@ -155,6 +156,25 @@ if (config.has('sipAcl.enabled') && config.get('sipAcl.enabled')) {
 srf.invite(callHandler);
 
 const metricsPort = config.has('metrics.port') ? config.get('metrics.port') : 9090;
-startMetricsServer(metricsPort, logger);
+const metricsServer = startMetricsServer(metricsPort, logger);
+
+let _shutdownStarted = false;
+function gracefulShutdown(signal) {
+  if (_shutdownStarted) return;
+  _shutdownStarted = true;
+  logger.info({ signal }, 'Received shutdown signal — starting graceful shutdown');
+  if (setShuttingDown) setShuttingDown();
+  if (destroyAllDialogs) destroyAllDialogs(logger);
+  if (sipOptionsMonitor) sipOptionsMonitor.stop();
+  if (metricsServer) metricsServer.close(() => logger.info('Metrics server closed'));
+  const drainMs = config.has('shutdownDrainMs') ? config.get('shutdownDrainMs') : 5000;
+  // ref'd timer — keeps event loop alive so BYE messages have time to be transmitted
+  setTimeout(() => {
+    logger.info('Shutdown drain timeout reached — exiting');
+    process.exit(0);
+  }, drainMs);
+}
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT',  gracefulShutdown);
 
 module.exports = srf;
